@@ -74,15 +74,21 @@ def verifyCredentials(username, password):
 def index():
     return jsonify(genReturnJson(200, 'Index page'))
 
+user_post_args = reqparse.RequestParser()
+user_post_args.add_argument('username', type=str, required=True)
+user_post_args.add_argument('password', type=str, required=True)
+
 #@app.route('/user/register', methods=['POST'])
 class RegisterUser(Resource):
-    def post(self):
-        data = request.form
-        username = data['username']
-        password = data['password']
+    def post(self, username, password):
+#        data = request.form
+#        username = data['username']
+#        password = data['password']
+
+        args = user_post_args.parse_args()
 
         if UserExists(username):
-            return genReturnJson(301, 'Username already exists')
+            abort(301, 'User already exists')
         
         hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 
@@ -222,4 +228,4 @@ api.add_resource(RemoveProduct, '/products/remove')
 api.add_resource(Product, '/products/product/')
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0')
+    app.run(host='0.0.0.0', debug = True)
