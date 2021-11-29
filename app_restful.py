@@ -8,12 +8,16 @@ import bcrypt
 app = Flask(__name__)
 api = Api(app)
 
-client = MongoClient("mongodb+srv://teste:teste_dev@hugovm-dev.vta9r.mongodb.net/myFirstDatabase?retryWrites=true&w=majority")
+#client = MongoClient("mongodb+srv://teste:teste_dev@hugovm-dev.vta9r.mongodb.net/myFirstDatabase?retryWrites=true&w=majority&ssl=true&ssl_cert_reqs=CERT_NONE")
 # db = client.test
-db = client.starwars_shop
-users = db["users"]
-products = db["products"]
-carts = db['carts']
+#db = client.starwars_shop
+#users = db["users"]
+#products = db["products"]
+#carts = db['carts']
+
+#parser = reqparse.RequestParser()
+#parser.add_argument('username')
+
 
 def UserExists(username):
     if users.count_documents({"username": username}) == 0:
@@ -74,19 +78,23 @@ def verifyCredentials(username, password):
 def index():
     return jsonify(genReturnJson(200, 'Index page'))
 
-user_post_args = reqparse.RequestParser()
-user_post_args.add_argument('username', type=str, required=True)
-user_post_args.add_argument('password', type=str, required=True)
+#user_post_args = reqparse.RequestParser()
+#user_post_args.add_argument('username', type=str, required=True)
+#user_post_args.add_argument('password', type=str, required=True)
 
-#@app.route('/user/register', methods=['POST'])
-class RegisterUser(Resource):
+class User(Resource):
+    def get(self, username, password):
+        if not UserExists(username):
+            abort(404,message='User does not exist')
+        return users.find_one({'username': username})
+
+    def delete(self, username, password):
+        if not UserExists(username):
+            abort(404,message='User does not exist')
+        users.find_one_and_delete({'username': username})
+        return '', 204
+
     def post(self, username, password):
-#        data = request.form
-#        username = data['username']
-#        password = data['password']
-
-        args = user_post_args.parse_args()
-
         if UserExists(username):
             abort(301, 'User already exists')
         
@@ -101,8 +109,8 @@ class RegisterUser(Resource):
             'username': username,
             'products': {}
         })
+        return 'User added', 200
 
-        return jsonify(genReturnJson(200, 'User successfully added'))
 
 class DeleteUser(Resource):
     def post(self):
@@ -218,9 +226,9 @@ class Product(Resource):
 
 
 
-
-api.add_resource(RegisterUser, '/user/register')
-api.add_resource(DeleteUser, '/user/delete')
+api.add_resource(User, '/User/<string:username><string:password>')
+#api.add_resource(RegisterUser, '/user/register')
+#api.add_resource(DeleteUser, '/user/delete')
 api.add_resource(AddToCart, '/cart/add')
 api.add_resource(RemoveFromCart, '/cart/remove')
 api.add_resource(AddNewProduct, '/products/new')
