@@ -2,238 +2,32 @@ from itertools import product
 from typing import Dict
 from flask import Flask, jsonify, request
 from flask_restful import Api, Resource, reqparse, abort
+from flask_restful import fields, marshal_with
 from pymongo import MongoClient
 import bcrypt
+from common.common import UserExists, EmptyCart, ProductInCart, genReturnJson, ProductExists, verifyPw, verifyCredentials
+import json, bson
+from resources.user import User
+from resources.cart import Cart
+from resources.product import Product
+from db.db import users, carts, products
 
 app = Flask(__name__)
 api = Api(app)
 
-#client = MongoClient("mongodb+srv://teste:teste_dev@hugovm-dev.vta9r.mongodb.net/myFirstDatabase?retryWrites=true&w=majority&ssl=true&ssl_cert_reqs=CERT_NONE")
-# db = client.test
-#db = client.starwars_shop
-#users = db["users"]
-#products = db["products"]
-#carts = db['carts']
+class MyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, bson.ObjectId):
+            return str(obj)
+        if isinstance(obj, bytes):
+            return str(obj, encoding='utf-8')
+        return super(MyEncoder, self).default(obj) 
 
-#parser = reqparse.RequestParser()
-#parser.add_argument('username')
+app.json_encoder = MyEncoder
 
-
-def UserExists(username):
-    if users.count_documents({"username": username}) == 0:
-        return False
-    else:
-        return True
-
-def EmptyCart(username):
-    if carts.find_one({'username': username})['products'] == {}:
-        return True
-    else:
-        return False
-
-def ProductInCart(username, id):
-    if carts.find_one({'username': username})['products'].get(id) is None:
-        return False
-    else:
-        return True
-
-def genReturnJson(status, msg):
-    returnJson = {
-        'status': status,
-        'msg': msg
-    }
-    return returnJson
-
-def ProductExists(id):
-    if products.count_documents({'id': id}) == 0:
-        return False
-    else:
-        return True
-
-def verifyPw(username, password):
-    if not UserExists(username):
-        return False
-
-    hashed_pw = users.find({
-        "username":username
-    })[0]["password"]
-
-    if bcrypt.hashpw(password.encode('utf8'), hashed_pw) == hashed_pw:
-        return True
-    else:
-        return False
-
-def verifyCredentials(username, password):
-    if not UserExists(username):
-        return genReturnJson(301, "Invalid Username"), True
-
-    correct_pw = verifyPw(username, password)
-
-    if not correct_pw:
-        return genReturnJson(302, "Incorrect Password"), True
-
-    return None, False
-
-@app.route('/')
-def index():
-    return jsonify(genReturnJson(200, 'Index page'))
-
-#user_post_args = reqparse.RequestParser()
-#user_post_args.add_argument('username', type=str, required=True)
-#user_post_args.add_argument('password', type=str, required=True)
-
-class User(Resource):
-    def get(self, username, password):
-        if not UserExists(username):
-            abort(404,message='User does not exist')
-        return users.find_one({'username': username})
-
-    def delete(self, username, password):
-        if not UserExists(username):
-            abort(404,message='User does not exist')
-        users.find_one_and_delete({'username': username})
-        return '', 204
-
-    def post(self, username, password):
-        if UserExists(username):
-            abort(301, 'User already exists')
-        
-        hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-        users.insert_one({
-            'username': username,
-            'password': hashed_pw,
-            'cart': {}
-        })
-        carts.insert_one({
-            'username': username,
-            'products': {}
-        })
-        return 'User added', 200
-
-
-class DeleteUser(Resource):
-    def post(self):
-        data = request.form
-        username = data['username']
-
-        if not UserExists(username):
-            return genReturnJson(302, 'Username does not exist')
-        
-        users.delete_one({'username': username})
-        carts.delete_one({'username': username})
-
-        return jsonify(genReturnJson(200, 'User successfuly deleted'))
-
-class AddToCart(Resource):
-    def post(self):
-        data = request.form
-        username = data['username']
-        password = data['password']
-        product_id = data['id']
-        quantity = int(data['quantity'])
-
-        # Check if user exists
-        returnJson, error = verifyCredentials(username, password)
-        if error:
-            return jsonify(returnJson)
-        
-        if not ProductExists(product_id):
-            return jsonify(genReturnJson(303, 'Product id does not exist'))
-        
-        carts.find_one_and_update(
-            {'username': username},
-            {'$inc': {'products.'+product_id: quantity}},
-            upsert = True)
-        
-        return jsonify(genReturnJson(200, 'Product added to cart'))
-
-class RemoveFromCart(Resource):
-    def post(self):
-        data = request.form
-        username = data['username']
-        password = data['password']
-        product_id = data['id']
-        quantity = int(data['quantity'])
-
-        # Check if user exists
-        returnJson, error = verifyCredentials(username, password)
-        if error:
-            return jsonify(returnJson)
-        
-        if not ProductExists(product_id):
-            return jsonify(genReturnJson(303, 'Product id does not exist'))
-        
-        if not ProductInCart(username, product_id):
-            return jsonify(genReturnJson(304, 'Product not in cart'))
-
-        carts.find_one_and_update(
-            {'username': username},
-            {'$inc': {'products.'+product_id: -quantity}},
-            upsert = False)
-
-        if carts.find_one({'username': username})['products'][product_id] < 0:
-            carts.find_one_and_update(
-                {'username': username},
-                {'$unset': {'products.'+product_id: ""}},
-                upsert = False)
-        
-        return jsonify(genReturnJson(200, 'Product removed from cart'))
-
-class AddNewProduct(Resource):
-    def post(self):
-        data = request.form
-        product_id = data['id']
-        name = data['name']
-        stock = int(data['quantity'])
-        value = float(data['value'])
-
-        if ProductExists(product_id):
-            return jsonify(genReturnJson(303, 'Product id already exists'))
-        
-        products.insert_one(
-            {'id': product_id,
-            'name': name,
-            'stock': stock,
-            'value': value})
-        
-        return jsonify(genReturnJson(200, 'New product added'))
-
-class RemoveProduct(Resource):
-    def post(self):
-        data = request.form
-        product_id = data['id']
-
-        if not ProductExists(product_id):
-            return jsonify(genReturnJson(305, 'Product id does not exist'))
-        
-        products.find_one_and_delete({'id': product_id})
-        
-        return jsonify(genReturnJson(200, 'Product removed'))
-
-parser = reqparse.RequestParser()
-parser.add_argument('product_id')
-
-
-def abortProductNotExist(product_id):
-    if products.count_documents({'id': product_id}) == 0:
-        abort(404, message='Product {} does not exist'.format(product_id))
-
-class Product(Resource):
-    def get (self, product_id):
-        abortProductNotExist(product_id)
-        return products.find_one({'id': product_id})
-
-
-
-api.add_resource(User, '/User/<string:username><string:password>')
-#api.add_resource(RegisterUser, '/user/register')
-#api.add_resource(DeleteUser, '/user/delete')
-api.add_resource(AddToCart, '/cart/add')
-api.add_resource(RemoveFromCart, '/cart/remove')
-api.add_resource(AddNewProduct, '/products/new')
-api.add_resource(RemoveProduct, '/products/remove')
-api.add_resource(Product, '/products/product/')
+api.add_resource(User, '/user/')
+api.add_resource(Cart, '/cart/')
+api.add_resource(Product, '/product/')
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', debug = True)

@@ -4,23 +4,27 @@ import bcrypt
 from db.db import users, carts
 from common.common import UserExists
 
-user_args = reqparse.RequestParser()
-user_args.add_argument('username', type=str, required=True, help='Username required')
-user_args.add_argument('password', type=str, required=True)
+cart_args = reqparse.RequestParser()
+cart_args.add_argument('username', type=str, required=True, help='Username required')
+cart_args.add_argument('password', type=str, required=True, help='Missing password')
+cart_args.add_argument('product', type=dict, help='Need to specify one product')
+cart_args.add_argument('quantity', type=dict, help='Need to specify the quantity')
 
-class User(Resource):
+
+class Cart(Resource):
     def get(self):
-        args = user_args.parse_args()
+        args = cart_args.parse_args()
         username = args['username']
         password = args['password']
         if not UserExists(username):
             abort(404, message='User does not exist')
-        return users.find_one({'username': username},
+        return carts.find_one({'username': username},
                             {'_id': False,
-                            'password': False}), 200
+                            'password': False,
+                            'username': False}), 200
 
     def delete(self):
-        args = user_args.parse_args()
+        args = cart_args.parse_args()
         username = args['username']
         password = args['password']
         if not UserExists(username):
@@ -30,7 +34,7 @@ class User(Resource):
         return 'User deleted', 204
 
     def post(self):
-        args = user_args.parse_args()
+        args = cart_args.parse_args()
         username = args['username']
         password = args['password']
         if UserExists(username):
