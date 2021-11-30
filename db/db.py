@@ -1,6 +1,8 @@
 from pymongo import MongoClient
+import certifi
 
-client = MongoClient("mongodb+srv://teste:teste_dev@hugovm-dev.vta9r.mongodb.net/myFirstDatabase?retryWrites=true&w=majority&ssl=true&ssl_cert_reqs=CERT_NONE")
+connection_string = "mongodb+srv://teste:teste_dev@hugovm-dev.vta9r.mongodb.net/myFirstDatabase?retryWrites=true&w=majority"
+client = MongoClient(connection_string, tlsCAFile=certifi.where())
 db = client.starwars_shop
 users = db["users"]
 products = db["products"]
