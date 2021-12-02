@@ -2,5 +2,9 @@ api_roma.py
 app_udemy.py
 app.py
 backend.py
-__pycache__/
 db.py
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
